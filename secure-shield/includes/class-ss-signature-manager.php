@@ -73,15 +73,15 @@ class Secure_Shield_Signature_Manager {
      */
     protected function default_signatures() {
         return array(
-            'base64_decode(' => __( 'Obfuscated payload via base64_decode', 'secure-shield' ),
-            'gzinflate('      => __( 'Compressed malware payload', 'secure-shield' ),
-            'shell_exec('     => __( 'Potential command execution', 'secure-shield' ),
-            'passthru('       => __( 'Potential command execution', 'secure-shield' ),
-            'preg_replace("/.*e"' => __( 'Deprecated preg_replace /e misuse', 'secure-shield' ),
-            'wp_ajax_nopriv_' => __( 'Unprotected AJAX endpoint', 'secure-shield' ),
-            'document.cookie' => __( 'Potential cross-site scripting', 'secure-shield' ),
-            'onerror='        => __( 'Inline event handler suspicious', 'secure-shield' ),
-            'eval('           => __( 'Dynamic code execution', 'secure-shield' ),
+            'base64_decode('                                   => __( 'Obfuscated payload via base64_decode', 'secure-shield' ),
+            'gzinflate('                                       => __( 'Compressed malware payload', 'secure-shield' ),
+            'shell_exec('                                      => __( 'Potential command execution', 'secure-shield' ),
+            'passthru('                                        => __( 'Potential command execution', 'secure-shield' ),
+            'regex:/preg_replace\s*\(\s*[\'\"][^\'\"]+\/e[\'\"]/i' => __( 'Deprecated preg_replace /e misuse', 'secure-shield' ),
+            'wp_ajax_nopriv_'                                  => __( 'Unprotected AJAX endpoint', 'secure-shield' ),
+            'document.cookie'                                  => __( 'Potential cross-site scripting', 'secure-shield' ),
+            'onerror='                                         => __( 'Inline event handler suspicious', 'secure-shield' ),
+            'eval('                                            => __( 'Dynamic code execution', 'secure-shield' ),
         );
     }
 

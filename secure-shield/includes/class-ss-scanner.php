@@ -173,15 +173,29 @@ class Secure_Shield_Scanner {
 
         $file_relative = str_replace( wp_normalize_path( ABSPATH ), '', wp_normalize_path( $file_path ) );
         foreach ( $signatures as $signature => $description ) {
-            if ( stripos( $contents, $signature ) !== false ) {
-                $results['files'][ $file_relative ][] = array(
-                    'signature'   => $signature,
-                    'description' => $description,
-                    'severity'    => $this->determine_severity( $signature ),
-                );
-                if ( 'critical' === $this->determine_severity( $signature ) ) {
-                    $results['critical'][ $file_relative ] = $description;
+            $is_regex = 0 === strpos( $signature, 'regex:' );
+
+            if ( $is_regex ) {
+                $pattern = substr( $signature, 6 );
+                $match   = @preg_match( $pattern, $contents );
+
+                if ( false === $match || 1 !== $match ) {
+                    continue;
                 }
+            } elseif ( stripos( $contents, $signature ) === false ) {
+                continue;
+            }
+
+            $severity = $this->determine_severity( $signature );
+
+            $results['files'][ $file_relative ][] = array(
+                'signature'   => $is_regex ? 'regex: ' . $pattern : $signature,
+                'description' => $description,
+                'severity'    => $severity,
+            );
+
+            if ( 'critical' === $severity ) {
+                $results['critical'][ $file_relative ] = $description;
             }
         }
 
@@ -308,12 +322,20 @@ class Secure_Shield_Scanner {
      * @return string
      */
     protected function determine_severity( $signature ) {
+        if ( 0 === strpos( $signature, 'regex:' ) ) {
+            if ( 0 === strpos( $signature, 'regex:/preg_replace' ) ) {
+                return 'critical';
+            }
+            $signature = substr( $signature, 6 );
+        }
+
         $critical = array( 'eval(', 'shell_exec(', 'passthru(', 'base64_decode(' );
         foreach ( $critical as $match ) {
             if ( false !== strpos( $signature, $match ) ) {
                 return 'critical';
             }
         }
+
         return 'warning';
     }
 
