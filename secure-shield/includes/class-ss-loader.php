@@ -56,7 +56,7 @@ class Secure_Shield_Loader {
         $this->services['signatures']  = new Secure_Shield_Signature_Manager( $this->services['logger'], $this->services['settings'] );
         $this->services['scanner']     = new Secure_Shield_Scanner( $this->services['logger'], $this->services['signatures'], $this->services['settings'], $this->services['remediator'] );
         $this->services['permissions'] = new Secure_Shield_Permissions( $this->services['logger'] );
-        $this->services['firewall']    = new Secure_Shield_Firewall( $this->services['logger'] );
+        $this->services['firewall']    = new Secure_Shield_Firewall( $this->services['logger'], $this->services['signatures'] );
         $this->services['cloudflare']  = new Secure_Shield_Cloudflare( $this->services['logger'] );
         $this->services['scheduler']   = new Secure_Shield_Scheduler( $this->services['scanner'], $this->services['permissions'], $this->services['firewall'], $this->services['logger'] );
         $this->services['backup']      = new Secure_Shield_Backup( $this->services['logger'] );
