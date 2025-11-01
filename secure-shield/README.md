@@ -6,7 +6,7 @@ Secure Shield is an advanced WordPress security plugin that delivers comprehensi
 
 - **Multi-mode Malware Scanner**: Deep, quick, and core integrity scans across the entire WordPress installation (files and database) using continuously updated open-source signatures.
 - **Automated Remediation**: Quarantine suspicious files, sanitize database payloads, and notify administrators when critical issues are detected.
-- **Application Firewall**: Real-time request inspection, proactive IP blocking, configurable security headers, and Cloudflare integration for instant network-level enforcement.
+- **Application Firewall**: Signature-informed request inspection, user-agent denylisting, CSRF/origin enforcement, REST and XML-RPC hardening, upload sanitization, proactive IP blocking, configurable security headers, and Cloudflare integration for instant network-level enforcement.
 - **Permission Auditing**: Routine validation of sensitive file and directory permissions with actionable recommendations.
 - **Threat Intelligence Sync**: Twice-daily ingestion of open-source threat feeds (YARA, Emerging Threats, AbuseCH ThreatFox, CIRCL CVEs) plus optional NVD, OSV.dev, and WPScan enrichment with configurable API credentials.
 - **Integrity Monitoring & Auto Repair**: WordPress core checksums verified against wordpress.org with optional trusted auto-repair sourcing for tampered files.

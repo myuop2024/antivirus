@@ -19,12 +19,21 @@ class Secure_Shield_Firewall {
     protected $logger;
 
     /**
+     * Signature manager instance.
+     *
+     * @var Secure_Shield_Signature_Manager
+     */
+    protected $signatures;
+
+    /**
      * Constructor.
      *
-     * @param Secure_Shield_Logger $logger Logger instance.
+     * @param Secure_Shield_Logger           $logger     Logger instance.
+     * @param Secure_Shield_Signature_Manager $signatures Signature manager instance.
      */
-    public function __construct( Secure_Shield_Logger $logger ) {
-        $this->logger = $logger;
+    public function __construct( Secure_Shield_Logger $logger, Secure_Shield_Signature_Manager $signatures ) {
+        $this->logger     = $logger;
+        $this->signatures = $signatures;
     }
 
     /**
@@ -32,7 +41,12 @@ class Secure_Shield_Firewall {
      */
     public function register() {
         add_action( 'init', array( $this, 'apply_security_headers' ) );
-        add_action( 'plugins_loaded', array( $this, 'monitor_requests' ) );
+        add_action( 'init', array( $this, 'enforce_origin_policies' ), 1 );
+        add_action( 'plugins_loaded', array( $this, 'monitor_requests' ), 1 );
+        add_action( 'template_redirect', array( $this, 'prevent_author_enumeration' ), 0 );
+        add_filter( 'rest_pre_dispatch', array( $this, 'scrutinize_rest_requests' ), 10, 3 );
+        add_filter( 'wp_handle_upload_prefilter', array( $this, 'inspect_uploads' ) );
+        add_action( 'xmlrpc_call', array( $this, 'guard_xmlrpc_call' ) );
     }
 
     /**
@@ -54,28 +68,263 @@ class Secure_Shield_Firewall {
      * Monitor requests for suspicious patterns.
      */
     public function monitor_requests() {
-        $ip = $this->get_ip_address();
-        $uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
-        $user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+        if ( is_admin() && ! wp_doing_ajax() ) {
+            return;
+        }
 
-        $patterns = array(
-            '/(<|%3C)script/i',
-            '/union(\s+)select/i',
-            '/base64_decode\s*\(/i',
-            '/eval\s*\(/i',
+        $ip         = $this->get_ip_address();
+        $uri        = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+        $user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+        $method     = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '';
+
+        if ( $this->is_denied_user_agent( $user_agent ) ) {
+            $this->block_ip( $ip, sprintf( 'Denied user agent detected: %s', $user_agent ) );
+            wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+        }
+
+        $payload_parts = array(
+            'uri'      => $uri,
+            'query'    => wp_unslash( $_GET ),
+            'post'     => wp_unslash( $_POST ),
+            'cookies'  => wp_unslash( $_COOKIE ),
+            'raw_body' => file_get_contents( 'php://input' ),
         );
 
-        $payload = wp_json_encode( array( $uri, wp_unslash( $_REQUEST ) ) );
-        foreach ( $patterns as $pattern ) {
-            if ( preg_match( $pattern, $payload ) ) {
-                $this->block_ip( $ip, 'Payload matched firewall pattern.' );
-                wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
-            }
-        }
+        $payload = wp_json_encode( $payload_parts );
+        $this->inspect_with_signatures( $payload, $ip );
 
         if ( empty( $user_agent ) || strlen( $user_agent ) < 5 ) {
             $this->block_ip( $ip, 'Missing or empty user agent.' );
+            wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
         }
+
+        if ( 'POST' === $method && $this->looks_like_csrf_probe( $payload_parts ) ) {
+            $this->block_ip( $ip, 'Potential CSRF probe detected.' );
+            wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+        }
+    }
+
+    /**
+     * Enforce strict origin policies for state-changing requests.
+     */
+    public function enforce_origin_policies() {
+        if ( empty( $_SERVER['REQUEST_METHOD'] ) ) {
+            return;
+        }
+
+        $method = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) );
+        if ( ! in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
+            return;
+        }
+
+        if ( wp_doing_cron() || defined( 'XMLRPC_REQUEST' ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+            return;
+        }
+
+        $origin  = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+        $referer = isset( $_SERVER['HTTP_REFERER'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '';
+        $host    = wp_parse_url( home_url(), PHP_URL_HOST );
+
+        $valid = false;
+        foreach ( array( $origin, $referer ) as $header ) {
+            if ( empty( $header ) ) {
+                continue;
+            }
+
+            $header_host = wp_parse_url( $header, PHP_URL_HOST );
+            if ( ! empty( $header_host ) && $header_host === $host ) {
+                $valid = true;
+                break;
+            }
+        }
+
+        if ( ! $valid && ! is_user_logged_in() ) {
+            $ip = $this->get_ip_address();
+            $this->block_ip( $ip, 'State-changing request without trusted origin headers.' );
+            wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+        }
+    }
+
+    /**
+     * Prevent public author enumeration via ?author= queries.
+     */
+    public function prevent_author_enumeration() {
+        if ( is_admin() ) {
+            return;
+        }
+
+        $author = get_query_var( 'author' );
+        if ( ! empty( $author ) && is_numeric( $author ) && ! is_user_logged_in() ) {
+            $ip = $this->get_ip_address();
+            $this->block_ip( $ip, 'Author enumeration attempt blocked.' );
+            wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+        }
+    }
+
+    /**
+     * Scrutinize REST API requests and prevent sensitive enumeration.
+     *
+     * @param mixed           $result  Response to replace.
+     * @param WP_REST_Server  $server  Server instance.
+     * @param WP_REST_Request $request Incoming request.
+     *
+     * @return mixed
+     */
+    public function scrutinize_rest_requests( $result, $server, $request ) {
+        if ( ! ( $request instanceof WP_REST_Request ) ) {
+            return $result;
+        }
+
+        $route  = $request->get_route();
+        $method = $request->get_method();
+        $ip     = $this->get_ip_address();
+
+        if ( 'GET' === $method && preg_match( '#/wp/v2/users#', $route ) && ! current_user_can( 'list_users' ) ) {
+            $this->block_ip( $ip, 'REST API user enumeration blocked.' );
+            return new WP_Error( 'secure_shield_rest_blocked', __( 'User enumeration blocked by Secure Shield.', 'secure-shield' ), array( 'status' => 403 ) );
+        }
+
+        $payload = wp_json_encode( array(
+            'route'   => $route,
+            'params'  => $request->get_params(),
+            'headers' => $request->get_headers(),
+            'body'    => $request->get_body(),
+        ) );
+
+        if ( $this->inspect_with_signatures( $payload, $ip, false ) ) {
+            return new WP_Error( 'secure_shield_rest_blocked', __( 'REST API payload blocked by Secure Shield.', 'secure-shield' ), array( 'status' => 403 ) );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Inspect upload files and stop malicious extensions.
+     *
+     * @param array $file Uploaded file array.
+     *
+     * @return array|WP_Error
+     */
+    public function inspect_uploads( $file ) {
+        if ( empty( $file['name'] ) ) {
+            return $file;
+        }
+
+        $extension = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
+        $blocked   = array( 'php', 'phtml', 'php5', 'phar', 'cgi', 'pl', 'exe', 'sh' );
+
+        if ( in_array( $extension, $blocked, true ) ) {
+            $ip = $this->get_ip_address();
+            $this->block_ip( $ip, sprintf( 'Upload blocked for dangerous extension: %s', $extension ) );
+            return new WP_Error( 'secure_shield_upload_blocked', __( 'This file type is not allowed for security reasons.', 'secure-shield' ) );
+        }
+
+        return $file;
+    }
+
+    /**
+     * Guard XML-RPC calls against brute-force and pingback abuse.
+     *
+     * @param string $method XML-RPC method name.
+     */
+    public function guard_xmlrpc_call( $method ) {
+        $ip = $this->get_ip_address();
+
+        if ( in_array( $method, array( 'pingback.ping', 'pingback.extensions.getPingbacks' ), true ) ) {
+            $this->block_ip( $ip, sprintf( 'Blocked XML-RPC method: %s', $method ) );
+            wp_die( esc_html__( 'XML-RPC method blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+        }
+    }
+
+    /**
+     * Inspect payload against signature intelligence.
+     *
+     * @param string $payload Encoded payload to scan.
+     * @param string $ip      Client IP.
+     * @param bool   $terminate Whether to terminate execution when a signature hits.
+     *
+     * @return bool True when a match was found.
+     */
+    protected function inspect_with_signatures( $payload, $ip, $terminate = true ) {
+        $signatures = $this->signatures->get_signatures();
+
+        foreach ( $signatures as $signature => $description ) {
+            $description = sanitize_text_field( $description );
+
+            if ( 0 === strpos( $signature, 'regex:' ) ) {
+                $pattern = substr( $signature, 6 );
+                if ( @preg_match( $pattern, '' ) === false ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+                    continue;
+                }
+
+                if ( preg_match( $pattern, $payload ) ) {
+                    $this->block_ip( $ip, sprintf( 'Request matched signature: %s', $description ) );
+                    if ( $terminate ) {
+                        wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+                    }
+                    return true;
+                }
+                continue;
+            }
+
+            if ( false !== stripos( $payload, $signature ) ) {
+                $this->block_ip( $ip, sprintf( 'Request matched signature: %s', $description ) );
+                if ( $terminate ) {
+                    wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Identify CSRF probes with suspicious parameters.
+     *
+     * @param array $payload_parts Request components.
+     *
+     * @return bool
+     */
+    protected function looks_like_csrf_probe( $payload_parts ) {
+        $suspicious_keys = array( '_method', '__construct', 'GLOBALS', '_config' );
+
+        foreach ( $suspicious_keys as $key ) {
+            if ( isset( $payload_parts['post'][ $key ] ) || isset( $payload_parts['query'][ $key ] ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine if the user agent is denylisted.
+     *
+     * @param string $user_agent User agent string.
+     *
+     * @return bool
+     */
+    protected function is_denied_user_agent( $user_agent ) {
+        if ( empty( $user_agent ) ) {
+            return false;
+        }
+
+        $denylist = array(
+            '#(sqlmap|nikto|acunetix|wpscan|nmap)#i',
+            '#curl/[0-9]#i',
+            '#python-requests#i',
+            '#libwww-perl#i',
+            '#dirbuster#i',
+        );
+
+        foreach ( $denylist as $pattern ) {
+            if ( preg_match( $pattern, $user_agent ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
