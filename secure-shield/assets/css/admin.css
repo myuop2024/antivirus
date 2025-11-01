@@ -1,0 +1,117 @@
+.secure-shield {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #0f172a;
+}
+
+.secure-shield__title {
+    font-size: 2.5rem;
+    color: #1d4ed8;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.secure-shield__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.secure-shield__card {
+    background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 16px;
+    box-shadow: 0 16px 40px -24px rgba(15, 23, 42, 0.45);
+    padding: 1.75rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.secure-shield__card h2 {
+    font-size: 1.25rem;
+    margin-top: 0;
+    color: #1e293b;
+}
+
+.secure-shield__card--wide {
+    grid-column: 1 / -1;
+}
+
+.secure-shield__status--success {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.secure-shield__list {
+    margin: 0;
+    padding-left: 1rem;
+}
+
+.secure-shield__list--danger li {
+    color: #b91c1c;
+}
+
+.secure-shield__list--warning li {
+    color: #d97706;
+}
+
+.secure-shield__select {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.secure-shield__button-block {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.secure-shield__restore-form {
+    margin-top: 1rem;
+}
+
+.secure-shield__badge {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.secure-shield__badge--info {
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+}
+
+.secure-shield__badge--warning {
+    background: rgba(234, 179, 8, 0.15);
+    color: #b45309;
+}
+
+.secure-shield__badge--critical,
+.secure-shield__badge--danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #b91c1c;
+}
+
+.secure-shield--logs table {
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.secure-shield .button-warning {
+    background-color: #f59e0b;
+    border-color: #d97706;
+    color: #0f172a;
+}
+
+.secure-shield .button-warning:hover {
+    background-color: #d97706;
+    border-color: #b45309;
+    color: #fff;
+}
