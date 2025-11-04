@@ -43,6 +43,7 @@ class Secure_Shield_Loader {
         require_once SECURE_SHIELD_PATH . 'includes/class-ss-rest.php';
         require_once SECURE_SHIELD_PATH . 'includes/class-ss-updater.php';
         require_once SECURE_SHIELD_PATH . 'includes/class-ss-backup.php';
+        require_once SECURE_SHIELD_PATH . 'includes/class-ss-ai-analyzer.php';
         require_once SECURE_SHIELD_PATH . 'includes/class-ss-dashboard.php';
     }
 
@@ -60,6 +61,7 @@ class Secure_Shield_Loader {
         $this->services['cloudflare']  = new Secure_Shield_Cloudflare( $this->services['logger'] );
         $this->services['scheduler']   = new Secure_Shield_Scheduler( $this->services['scanner'], $this->services['permissions'], $this->services['firewall'], $this->services['logger'] );
         $this->services['backup']      = new Secure_Shield_Backup( $this->services['logger'] );
+        $this->services['ai_analyzer'] = new Secure_Shield_AI_Analyzer( $this->services['logger'], $this->services['settings'] );
         $this->services['dashboard']   = new Secure_Shield_Dashboard( $this->services['scanner'], $this->services['permissions'], $this->services['firewall'], $this->services['cloudflare'], $this->services['scheduler'], $this->services['backup'], $this->services['logger'], $this->services['settings'] );
         $this->services['rest']       = new Secure_Shield_REST( $this->services['scanner'], $this->services['logger'] );
         $this->services['assets']     = new Secure_Shield_Admin_Assets();

@@ -188,12 +188,133 @@ if ( ! defined( 'ABSPATH' ) ) {
                         </td>
                     </tr>
                     <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable MalwareBazaar Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_malwarebazaar_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_malwarebazaar_enabled" value="1" <?php checked( true, $settings->is_malwarebazaar_enabled() ); ?> /> <?php esc_html_e( 'Sync malware hashes from AbuseCH MalwareBazaar database.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable URLhaus Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_urlhaus_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_urlhaus_enabled" value="1" <?php checked( true, $settings->is_urlhaus_enabled() ); ?> /> <?php esc_html_e( 'Block malicious URLs from AbuseCH URLhaus feed.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable Feodo Tracker Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_feodotracker_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_feodotracker_enabled" value="1" <?php checked( true, $settings->is_feodotracker_enabled() ); ?> /> <?php esc_html_e( 'Track botnet C&C servers from AbuseCH Feodo Tracker.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable SSL Blacklist Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_sslbl_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_sslbl_enabled" value="1" <?php checked( true, $settings->is_sslbl_enabled() ); ?> /> <?php esc_html_e( 'Block malicious SSL certificates from AbuseCH SSLBL.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable PhishTank Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_phishtank_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_phishtank_enabled" value="1" <?php checked( true, $settings->is_phishtank_enabled() ); ?> /> <?php esc_html_e( 'Detect phishing URLs from PhishTank database.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable AlienVault OTX Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_alienvault_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_alienvault_enabled" value="1" <?php checked( true, $settings->is_alienvault_enabled() ); ?> /> <?php esc_html_e( 'Community-driven threat intelligence from AlienVault OTX.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable Malware Domain List Feed', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_malwaredomain_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_malwaredomain_enabled" value="1" <?php checked( true, $settings->is_malwaredomain_enabled() ); ?> /> <?php esc_html_e( 'Block known malware-hosting domains.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
                         <th scope="row"><?php esc_html_e( 'Enable Core Auto-Repair', 'secure-shield' ); ?></th>
                         <td>
                             <input type="hidden" name="secure_shield_auto_repair" value="0" />
                             <label><input type="checkbox" name="secure_shield_auto_repair" value="1" <?php checked( true, $settings->is_auto_repair_enabled() ); ?> /> <?php esc_html_e( 'Automatically fetch pristine WordPress core files when tampering is detected.', 'secure-shield' ); ?></label>
                         </td>
                     </tr>
+                    <tr>
+                        <th scope="row"><label for="secure_shield_cleanup_mode"><?php esc_html_e( 'Automatic Cleanup Mode', 'secure-shield' ); ?></label></th>
+                        <td>
+                            <select name="secure_shield_cleanup_mode" id="secure_shield_cleanup_mode" class="regular-text">
+                                <option value="disabled" <?php selected( $settings->get_cleanup_mode(), 'disabled' ); ?>><?php esc_html_e( 'Disabled (Manual Review Only)', 'secure-shield' ); ?></option>
+                                <option value="critical_only" <?php selected( $settings->get_cleanup_mode(), 'critical_only' ); ?>><?php esc_html_e( 'Critical Only (Recommended)', 'secure-shield' ); ?></option>
+                                <option value="aggressive" <?php selected( $settings->get_cleanup_mode(), 'aggressive' ); ?>><?php esc_html_e( 'Aggressive (Maximum Protection)', 'secure-shield' ); ?></option>
+                            </select>
+                            <p class="description"><?php esc_html_e( 'Controls automatic threat remediation. Critical Only mode quarantines only critical threats, Aggressive mode handles all threats automatically.', 'secure-shield' ); ?></p>
+                        </td>
+                    </tr>
+                </table>
+                <?php submit_button( __( 'Save Settings', 'secure-shield' ) ); ?>
+            </form>
+        </div>
+
+        <div class="secure-shield__card secure-shield__card--wide">
+            <h2><?php esc_html_e( 'AI-Powered Threat Analysis', 'secure-shield' ); ?></h2>
+            <p><?php esc_html_e( 'Enhance malware detection with DeepSeek V3.1 AI analysis via OpenRouter. The AI can analyze suspicious code, suggest repairs, learn from patterns, and verify false positives.', 'secure-shield' ); ?></p>
+            <form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+                <?php
+                settings_fields( 'secure_shield' );
+                do_settings_sections( 'secure_shield' );
+                ?>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Enable AI Analysis', 'secure-shield' ); ?></th>
+                        <td>
+                            <input type="hidden" name="secure_shield_ai_enabled" value="0" />
+                            <label><input type="checkbox" name="secure_shield_ai_enabled" id="secure_shield_ai_enabled" value="1" <?php checked( true, $settings->is_ai_enabled() ); ?> /> <?php esc_html_e( 'Use AI to analyze threats, generate repairs, and reduce false positives.', 'secure-shield' ); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="secure_shield_deepseek_api_key"><?php esc_html_e( 'OpenRouter API Key', 'secure-shield' ); ?></label></th>
+                        <td>
+                            <input type="password" name="secure_shield_deepseek_api_key" id="secure_shield_deepseek_api_key" value="<?php echo esc_attr( get_option( 'secure_shield_deepseek_api_key', '' ) ); ?>" class="regular-text" autocomplete="off" />
+                            <p class="description">
+                                <?php esc_html_e( 'Get your API key from', 'secure-shield' ); ?> <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a>.
+                                <?php esc_html_e( 'Model: deepseek/deepseek-chat-v3.1:free', 'secure-shield' ); ?>
+                            </p>
+                            <button type="button" id="test-ai-connection" class="button button-secondary" style="margin-top: 10px;">
+                                <span class="dashicons dashicons-cloud"></span>
+                                <?php esc_html_e( 'Test Connection', 'secure-shield' ); ?>
+                            </button>
+                            <span id="ai-test-result" style="margin-left: 10px;"></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'AI Capabilities', 'secure-shield' ); ?></th>
+                        <td>
+                            <ul style="list-style: disc; margin-left: 20px;">
+                                <li><?php esc_html_e( 'Threat Analysis: Analyze suspicious code with confidence scoring', 'secure-shield' ); ?></li>
+                                <li><?php esc_html_e( 'Code Repair: Generate safe versions of infected files', 'secure-shield' ); ?></li>
+                                <li><?php esc_html_e( 'Pattern Learning: Extract malware signatures from samples', 'secure-shield' ); ?></li>
+                                <li><?php esc_html_e( 'False Positive Detection: Verify legitimate code flagged by signatures', 'secure-shield' ); ?></li>
+                            </ul>
+                        </td>
+                    </tr>
+                </table>
+                <?php submit_button( __( 'Save AI Settings', 'secure-shield' ) ); ?>
+            </form>
+        </div>
+
+        <div class="secure-shield__card secure-shield__card--wide">
+            <h2><?php esc_html_e( 'Cloudflare Integration', 'secure-shield' ); ?></h2>
+            <p><?php esc_html_e( 'Automatically block malicious IPs at the edge using Cloudflare Firewall Rules.', 'secure-shield' ); ?></p>
+            <form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+                <?php
+                settings_fields( 'secure_shield' );
+                do_settings_sections( 'secure_shield' );
+                ?>
+                <table class="form-table">
                     <tr>
                         <th scope="row"><label for="secure_shield_cloudflare_email"><?php esc_html_e( 'Cloudflare Email', 'secure-shield' ); ?></label></th>
                         <td><input type="email" name="secure_shield_cloudflare_email" id="secure_shield_cloudflare_email" value="<?php echo esc_attr( get_option( 'secure_shield_cloudflare_email', '' ) ); ?>" class="regular-text" /></td>
@@ -207,8 +328,49 @@ if ( ! defined( 'ABSPATH' ) ) {
                         <td><input type="text" name="secure_shield_cloudflare_zone" id="secure_shield_cloudflare_zone" value="<?php echo esc_attr( get_option( 'secure_shield_cloudflare_zone', '' ) ); ?>" class="regular-text" /></td>
                     </tr>
                 </table>
-                <?php submit_button( __( 'Save Settings', 'secure-shield' ) ); ?>
+                <?php submit_button( __( 'Save Cloudflare Settings', 'secure-shield' ) ); ?>
             </form>
         </div>
     </div>
 </div>
+
+<script type="text/javascript">
+jQuery(document).ready(function($) {
+    $('#test-ai-connection').on('click', function(e) {
+        e.preventDefault();
+        var $button = $(this);
+        var $result = $('#ai-test-result');
+        var apiKey = $('#secure_shield_deepseek_api_key').val();
+
+        if (!apiKey) {
+            $result.html('<span style="color: #dc3232;"><?php esc_html_e( 'Please enter an API key first.', 'secure-shield' ); ?></span>');
+            return;
+        }
+
+        $button.prop('disabled', true);
+        $result.html('<span style="color: #999;"><?php esc_html_e( 'Testing connection...', 'secure-shield' ); ?></span>');
+
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'secure_shield_test_ai',
+                nonce: '<?php echo esc_js( wp_create_nonce( 'secure_shield_test_ai' ) ); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    $result.html('<span style="color: #46b450;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + '</span>');
+                } else {
+                    $result.html('<span style="color: #dc3232;"><span class="dashicons dashicons-no"></span> ' + response.data.message + '</span>');
+                }
+            },
+            error: function() {
+                $result.html('<span style="color: #dc3232;"><?php esc_html_e( 'Connection test failed. Check your network.', 'secure-shield' ); ?></span>');
+            },
+            complete: function() {
+                $button.prop('disabled', false);
+            }
+        });
+    });
+});
+</script>
