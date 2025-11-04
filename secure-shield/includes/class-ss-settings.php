@@ -37,6 +37,8 @@ class Secure_Shield_Settings {
         'secure_shield_alienvault_enabled'    => '1',
         'secure_shield_malwaredomain_enabled' => '1',
         'secure_shield_cleanup_mode'          => 'critical_only', // disabled, critical_only, aggressive
+        'secure_shield_deepseek_api_key'      => '',
+        'secure_shield_ai_enabled'            => '1',
     );
 
     /**
@@ -72,6 +74,8 @@ class Secure_Shield_Settings {
         register_setting( 'secure_shield', 'secure_shield_alienvault_enabled', array( $this, 'sanitize_bool' ) );
         register_setting( 'secure_shield', 'secure_shield_malwaredomain_enabled', array( $this, 'sanitize_bool' ) );
         register_setting( 'secure_shield', 'secure_shield_cleanup_mode', array( $this, 'sanitize_cleanup_mode' ) );
+        register_setting( 'secure_shield', 'secure_shield_deepseek_api_key', 'sanitize_text_field' );
+        register_setting( 'secure_shield', 'secure_shield_ai_enabled', array( $this, 'sanitize_bool' ) );
     }
 
     /**
@@ -228,5 +232,23 @@ class Secure_Shield_Settings {
      */
     public function get_cleanup_mode() {
         return $this->get_option( 'secure_shield_cleanup_mode', 'critical_only' );
+    }
+
+    /**
+     * Get DeepSeek API key.
+     *
+     * @return string
+     */
+    public function get_deepseek_api_key() {
+        return trim( (string) $this->get_option( 'secure_shield_deepseek_api_key', '' ) );
+    }
+
+    /**
+     * Check if AI analysis is enabled.
+     *
+     * @return bool
+     */
+    public function is_ai_enabled() {
+        return '1' === $this->get_option( 'secure_shield_ai_enabled', '1' );
     }
 }
