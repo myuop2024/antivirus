@@ -36,6 +36,7 @@ class Secure_Shield_Settings {
         'secure_shield_phishtank_enabled'     => '1',
         'secure_shield_alienvault_enabled'    => '1',
         'secure_shield_malwaredomain_enabled' => '1',
+        'secure_shield_cleanup_mode'          => 'critical_only', // disabled, critical_only, aggressive
     );
 
     /**
@@ -70,6 +71,7 @@ class Secure_Shield_Settings {
         register_setting( 'secure_shield', 'secure_shield_phishtank_enabled', array( $this, 'sanitize_bool' ) );
         register_setting( 'secure_shield', 'secure_shield_alienvault_enabled', array( $this, 'sanitize_bool' ) );
         register_setting( 'secure_shield', 'secure_shield_malwaredomain_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_cleanup_mode', array( $this, 'sanitize_cleanup_mode' ) );
     }
 
     /**
@@ -81,6 +83,18 @@ class Secure_Shield_Settings {
      */
     public function sanitize_bool( $value ) {
         return ( ! empty( $value ) && 'false' !== $value && '0' !== $value ) ? '1' : '0';
+    }
+
+    /**
+     * Sanitize cleanup mode value.
+     *
+     * @param mixed $value Raw value.
+     *
+     * @return string
+     */
+    public function sanitize_cleanup_mode( $value ) {
+        $valid_modes = array( 'disabled', 'critical_only', 'aggressive' );
+        return in_array( $value, $valid_modes, true ) ? $value : 'critical_only';
     }
 
     /**
@@ -205,5 +219,14 @@ class Secure_Shield_Settings {
      */
     public function is_malwaredomain_enabled() {
         return '1' === $this->get_option( 'secure_shield_malwaredomain_enabled', '1' );
+    }
+
+    /**
+     * Get the automatic cleanup mode.
+     *
+     * @return string disabled, critical_only, or aggressive
+     */
+    public function get_cleanup_mode() {
+        return $this->get_option( 'secure_shield_cleanup_mode', 'critical_only' );
     }
 }

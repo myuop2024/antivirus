@@ -122,6 +122,29 @@ class Secure_Shield_Scanner {
         $this->verify_integrity( $results );
 
         $results['end'] = current_time( 'timestamp' );
+
+        // Automatic remediation if enabled
+        if ( $this->remediator && $this->settings ) {
+            $cleanup_mode = $this->settings->get_cleanup_mode();
+            if ( 'disabled' !== $cleanup_mode && ! empty( $results['critical'] ) ) {
+                $remediation_results = $this->remediator->auto_remediate_threats( $results );
+                $results['remediation'] = $remediation_results;
+
+                // Log remediation summary
+                $summary = sprintf(
+                    'Automatic remediation: %d files quarantined, %d files repaired, %d database entries sanitized.',
+                    count( $remediation_results['files_quarantined'] ),
+                    count( $remediation_results['files_repaired'] ),
+                    count( $remediation_results['database_sanitized'] )
+                );
+                do_action( 'secure_shield/log', $summary, 'critical' );
+
+                if ( ! empty( $remediation_results['errors'] ) ) {
+                    do_action( 'secure_shield/log', 'Remediation errors: ' . implode( ', ', $remediation_results['errors'] ), 'warning' );
+                }
+            }
+        }
+
         do_action( 'secure_shield/log', sprintf( 'Scan completed with %d critical issues.', count( $results['critical'] ) ) );
         return $results;
     }
