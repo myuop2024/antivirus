@@ -73,15 +73,117 @@ class Secure_Shield_Signature_Manager {
      */
     protected function default_signatures() {
         return array(
+            // Basic obfuscation and execution
             'base64_decode('                                   => __( 'Obfuscated payload via base64_decode', 'secure-shield' ),
             'gzinflate('                                       => __( 'Compressed malware payload', 'secure-shield' ),
-            'shell_exec('                                      => __( 'Potential command execution', 'secure-shield' ),
-            'passthru('                                        => __( 'Potential command execution', 'secure-shield' ),
-            'regex:/preg_replace\s*\(\s*[\'\"][^\'\"]+\/e[\'\"]/i' => __( 'Deprecated preg_replace /e misuse', 'secure-shield' ),
-            'wp_ajax_nopriv_'                                  => __( 'Unprotected AJAX endpoint', 'secure-shield' ),
-            'document.cookie'                                  => __( 'Potential cross-site scripting', 'secure-shield' ),
-            'onerror='                                         => __( 'Inline event handler suspicious', 'secure-shield' ),
+            'gzuncompress('                                    => __( 'Compressed malware payload', 'secure-shield' ),
+            'str_rot13('                                       => __( 'ROT13 obfuscated code', 'secure-shield' ),
+            'convert_uudecode('                                => __( 'UUencoded payload', 'secure-shield' ),
             'eval('                                            => __( 'Dynamic code execution', 'secure-shield' ),
+            'assert('                                          => __( 'Code execution via assert', 'secure-shield' ),
+            'preg_replace_callback('                           => __( 'Potential callback execution', 'secure-shield' ),
+            'regex:/preg_replace\s*\(\s*[\'\"][^\'\"]+\/e[\'\"]/i' => __( 'Deprecated preg_replace /e misuse', 'secure-shield' ),
+            'create_function('                                 => __( 'Deprecated dynamic function creation', 'secure-shield' ),
+
+            // Command execution
+            'shell_exec('                                      => __( 'Shell command execution', 'secure-shield' ),
+            'exec('                                            => __( 'Command execution', 'secure-shield' ),
+            'passthru('                                        => __( 'Command execution passthru', 'secure-shield' ),
+            'system('                                          => __( 'System command execution', 'secure-shield' ),
+            'proc_open('                                       => __( 'Process execution', 'secure-shield' ),
+            'popen('                                           => __( 'Pipe command execution', 'secure-shield' ),
+            'pcntl_exec('                                      => __( 'Process control execution', 'secure-shield' ),
+            '`'                                                => __( 'Backtick command execution', 'secure-shield' ),
+
+            // File operations (malicious)
+            'file_put_contents('                               => __( 'File writing operation', 'secure-shield' ),
+            'fwrite('                                          => __( 'File write operation', 'secure-shield' ),
+            'fputs('                                           => __( 'File output operation', 'secure-shield' ),
+            'file_get_contents("http'                          => __( 'Remote file inclusion attempt', 'secure-shield' ),
+            'curl_exec('                                       => __( 'Remote content fetch', 'secure-shield' ),
+            'fsockopen('                                       => __( 'Socket connection', 'secure-shield' ),
+            'pfsockopen('                                      => __( 'Persistent socket connection', 'secure-shield' ),
+            'stream_socket_client('                            => __( 'Stream socket connection', 'secure-shield' ),
+
+            // Database operations (suspicious)
+            'mysql_query('                                     => __( 'Deprecated MySQL query', 'secure-shield' ),
+            'mysqli_query('                                    => __( 'Direct database query', 'secure-shield' ),
+            'mysql_connect('                                   => __( 'Deprecated MySQL connection', 'secure-shield' ),
+            'mysqli_multi_query('                              => __( 'Multiple SQL queries', 'secure-shield' ),
+
+            // Known web shell signatures
+            'c99shell'                                         => __( 'C99 web shell detected', 'secure-shield' ),
+            'r57shell'                                         => __( 'R57 web shell detected', 'secure-shield' ),
+            'wso shell'                                        => __( 'WSO web shell detected', 'secure-shield' ),
+            'b374k'                                            => __( 'B374K web shell detected', 'secure-shield' ),
+            'regex:/\$_(GET|POST|REQUEST)\[.*\]\s*\(\s*\$_(GET|POST|REQUEST)/i' => __( 'Variable function execution pattern', 'secure-shield' ),
+            'FilesMan'                                         => __( 'FilesMan web shell component', 'secure-shield' ),
+            'Remoteshell'                                      => __( 'Remote shell indicator', 'secure-shield' ),
+            'regex:/function\s+wso_/i'                         => __( 'WSO shell function pattern', 'secure-shield' ),
+
+            // WordPress-specific threats
+            'wp_ajax_nopriv_'                                  => __( 'Unprotected AJAX endpoint', 'secure-shield' ),
+            'add_action(\'wp_head\','                          => __( 'Potential header injection', 'secure-shield' ),
+            'regex:/add_action\s*\(\s*[\'"]wp_footer[\'"]\s*,\s*[\'"](?!wp_)/i' => __( 'Suspicious footer hook', 'secure-shield' ),
+            'regex:/wp_remote_(get|post)\s*\([^)]*base64/i'   => __( 'WordPress HTTP with base64', 'secure-shield' ),
+            'regex:/\$wpdb->query\s*\(\s*\$_(GET|POST|REQUEST)/i' => __( 'SQL injection via WordPress DB', 'secure-shield' ),
+
+            // Crypto miners
+            'coinhive'                                         => __( 'CoinHive cryptominer', 'secure-shield' ),
+            'crypto-loot'                                      => __( 'CryptoLoot miner', 'secure-shield' ),
+            'webminepool'                                      => __( 'WebMinePool cryptominer', 'secure-shield' ),
+            'minero.cc'                                        => __( 'Minero cryptominer', 'secure-shield' ),
+            'regex:/new\s+Worker\s*\(\s*[\'"].*cryptonight/i' => __( 'Cryptonight web miner', 'secure-shield' ),
+            'regex:/\.mine\s*\(\s*[\'"][a-zA-Z0-9]{40,}/i'    => __( 'Cryptocurrency mining script', 'secure-shield' ),
+
+            // Backdoors and malicious redirects
+            'regex:/@include\s+[\'"]http/i'                   => __( 'Remote file inclusion', 'secure-shield' ),
+            'regex:/@require\s+[\'"]http/i'                   => __( 'Remote file requirement', 'secure-shield' ),
+            'regex:/header\s*\(\s*[\'"]location.*\$_(GET|POST|REQUEST)/i' => __( 'Redirect injection', 'secure-shield' ),
+            'regex:/meta\s+http-equiv.*refresh.*\$_(GET|POST)/i' => __( 'Meta refresh injection', 'secure-shield' ),
+            'regex:/\$_COOKIE\[[\'\"][^\'"]+[\'\"]\]\s*\(/i'  => __( 'Cookie-based code execution', 'secure-shield' ),
+            'regex:/\$_(SERVER|ENV)\[[\'\"]HTTP_.*[\'\"]\]\s*\(/i' => __( 'Header-based code execution', 'secure-shield' ),
+
+            // SQL injection patterns
+            'regex:/union\s+select/i'                          => __( 'SQL UNION injection', 'secure-shield' ),
+            'regex:/concat\s*\(.*char\s*\(/i'                 => __( 'SQL concat injection', 'secure-shield' ),
+            'regex:/0x[0-9a-f]{8,}/i'                         => __( 'Hexadecimal SQL injection', 'secure-shield' ),
+            'regex:/benchmark\s*\(\s*\d+/i'                   => __( 'SQL benchmark attack', 'secure-shield' ),
+            'regex:/sleep\s*\(\s*\d+/i'                       => __( 'SQL time-based injection', 'secure-shield' ),
+
+            // XSS patterns
+            'document.cookie'                                  => __( 'Cookie stealing attempt', 'secure-shield' ),
+            'onerror='                                         => __( 'Inline onerror event handler', 'secure-shield' ),
+            'onload='                                          => __( 'Inline onload event handler', 'secure-shield' ),
+            'javascript:'                                      => __( 'JavaScript protocol handler', 'secure-shield' ),
+            'regex:/<script[^>]*src\s*=\s*[\'"]http[^\'\"]+[\'\"]/i' => __( 'External script injection', 'secure-shield' ),
+            'regex:/<iframe[^>]*src\s*=\s*[\'"]http/i'        => __( 'Iframe injection', 'secure-shield' ),
+
+            // Ransomware indicators
+            'regex:/\.(encrypted|locked|crypto|crypted|EnCiPhErEd)/i' => __( 'Ransomware file extension', 'secure-shield' ),
+            'regex:/your\s+files?\s+(have\s+been\s+)?encrypted/i' => __( 'Ransomware message', 'secure-shield' ),
+            'regex:/pay.*bitcoin/i'                           => __( 'Ransomware payment demand', 'secure-shield' ),
+
+            // Information disclosure
+            'phpinfo()'                                        => __( 'PHP information disclosure', 'secure-shield' ),
+            'php_uname('                                       => __( 'System information disclosure', 'secure-shield' ),
+            'getmyuid('                                        => __( 'UID disclosure', 'secure-shield' ),
+            'getmypid('                                        => __( 'Process ID disclosure', 'secure-shield' ),
+            'regex:/var_dump\s*\(\s*\$_(SERVER|POST|GET|COOKIE)/i' => __( 'Sensitive variable dump', 'secure-shield' ),
+
+            // Serialization exploits
+            'unserialize('                                     => __( 'Unsafe deserialization', 'secure-shield' ),
+            'regex:/unserialize\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)/i' => __( 'User input deserialization', 'secure-shield' ),
+
+            // Malicious constants and variables
+            'regex:/\$GLOBALS\[[\'\"]_+[A-Z0-9]+_+[\'\"]\]/i' => __( 'Obfuscated global variable', 'secure-shield' ),
+            'regex:/\${[\'"]\w+[\'"]}/'                       => __( 'Variable variable pattern', 'secure-shield' ),
+            'regex:/\$\{[\s]*[\'"]/i'                         => __( 'Complex variable syntax', 'secure-shield' ),
+
+            // Reverse shells
+            'regex:/socket_create.*socket_connect/is'         => __( 'Socket-based reverse shell', 'secure-shield' ),
+            'regex:/proc_open.*descriptorspec/i'              => __( 'Process-based reverse shell', 'secure-shield' ),
+            'regex:/fsockopen.*\/bin\/(bash|sh)/i'            => __( 'Shell reverse connection', 'secure-shield' ),
         );
     }
 
@@ -91,15 +193,40 @@ class Secure_Shield_Signature_Manager {
     public function update_signatures() {
         $signatures = $this->default_signatures();
 
+        // Core threat intelligence feeds
         $this->ingest_text_feeds( $signatures );
         $this->ingest_cve_feed( $signatures );
         $this->ingest_nvd_feed( $signatures );
         $this->ingest_osv_feed( $signatures );
         $this->ingest_wpscan_feed( $signatures );
 
+        // Additional malware intelligence sources (all enabled by default)
+        if ( $this->settings->is_malwarebazaar_enabled() ) {
+            $this->ingest_malwarebazaar_feed( $signatures );
+        }
+        if ( $this->settings->is_urlhaus_enabled() ) {
+            $this->ingest_urlhaus_feed( $signatures );
+        }
+        if ( $this->settings->is_feodotracker_enabled() ) {
+            $this->ingest_feodo_tracker( $signatures );
+        }
+        if ( $this->settings->is_sslbl_enabled() ) {
+            $this->ingest_sslbl_feed( $signatures );
+        }
+        if ( $this->settings->is_phishtank_enabled() ) {
+            $this->ingest_phishtank_feed( $signatures );
+        }
+        if ( $this->settings->is_alienvault_enabled() ) {
+            $this->ingest_alienvault_otx( $signatures );
+        }
+        if ( $this->settings->is_malwaredomain_enabled() ) {
+            $this->ingest_malware_domain_list( $signatures );
+        }
+
+        $count = count( $signatures );
         update_option( self::OPTION_SIGNATURES, $signatures, false );
         update_option( self::OPTION_LAST_UPDATE, current_time( 'timestamp' ), false );
-        do_action( 'secure_shield/log', __( 'Threat intelligence feeds updated.', 'secure-shield' ) );
+        do_action( 'secure_shield/log', sprintf( __( 'Threat intelligence feeds updated. %d signatures loaded.', 'secure-shield' ), $count ) );
     }
 
     /**
@@ -335,6 +462,275 @@ class Secure_Shield_Signature_Manager {
             $key = sprintf( '%s — %s', $context, sanitize_text_field( $vulnerability['title'] ) );
             $description = $vulnerability['description'] ?? ( $vulnerability['references']['url'][0] ?? '' );
             $signatures[ $key ] = sanitize_text_field( $description ?: __( 'WPScan reported vulnerability', 'secure-shield' ) );
+        }
+    }
+
+    /**
+     * Ingest malware samples from MalwareBazaar (abuse.ch).
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_malwarebazaar_feed( array &$signatures ) {
+        $response = wp_remote_post(
+            'https://mb-api.abuse.ch/api/v1/',
+            array(
+                'timeout' => 30,
+                'body'    => array(
+                    'query' => 'get_recent',
+                    'selector' => '100', // Last 100 samples
+                ),
+            )
+        );
+
+        if ( is_wp_error( $response ) ) {
+            do_action( 'secure_shield/log', sprintf( 'Failed to fetch MalwareBazaar feed: %s', $response->get_error_message() ), 'warning' );
+            return;
+        }
+
+        $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( empty( $data['data'] ) || ! is_array( $data['data'] ) ) {
+            return;
+        }
+
+        foreach ( $data['data'] as $sample ) {
+            if ( empty( $sample['sha256_hash'] ) ) {
+                continue;
+            }
+
+            $signature = sanitize_text_field( $sample['sha256_hash'] );
+            $description = sprintf(
+                __( 'MalwareBazaar: %s (%s)', 'secure-shield' ),
+                $sample['signature'] ?? 'Unknown',
+                $sample['file_type'] ?? 'Unknown'
+            );
+            $signatures[ $signature ] = $description;
+
+            // Add file names if available
+            if ( ! empty( $sample['file_name'] ) ) {
+                $signatures[ sanitize_text_field( $sample['file_name'] ) ] = $description;
+            }
+        }
+    }
+
+    /**
+     * Ingest malicious URLs from URLhaus (abuse.ch).
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_urlhaus_feed( array &$signatures ) {
+        $response = wp_remote_get( 'https://urlhaus.abuse.ch/downloads/csv_recent/', array( 'timeout' => 30 ) );
+
+        if ( is_wp_error( $response ) ) {
+            do_action( 'secure_shield/log', sprintf( 'Failed to fetch URLhaus feed: %s', $response->get_error_message() ), 'warning' );
+            return;
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        if ( empty( $body ) ) {
+            return;
+        }
+
+        $lines = preg_split( '/\r?\n/', $body );
+        $count = 0;
+        foreach ( $lines as $line ) {
+            if ( $count++ > 500 ) {
+                break; // Limit to 500 URLs
+            }
+
+            $line = trim( $line );
+            if ( empty( $line ) || strpos( $line, '#' ) === 0 ) {
+                continue;
+            }
+
+            $parts = str_getcsv( $line );
+            if ( isset( $parts[2] ) ) { // URL is in column 2
+                $url_parts = wp_parse_url( $parts[2] );
+                if ( ! empty( $url_parts['host'] ) ) {
+                    $signatures[ $url_parts['host'] ] = __( 'URLhaus malicious domain', 'secure-shield' );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ingest Feodo Tracker botnet C2 servers.
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_feodo_tracker( array &$signatures ) {
+        $response = wp_remote_get( 'https://feodotracker.abuse.ch/downloads/ipblocklist.txt', array( 'timeout' => 30 ) );
+
+        if ( is_wp_error( $response ) ) {
+            do_action( 'secure_shield/log', sprintf( 'Failed to fetch Feodo Tracker: %s', $response->get_error_message() ), 'warning' );
+            return;
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        if ( empty( $body ) ) {
+            return;
+        }
+
+        $lines = preg_split( '/\r?\n/', $body );
+        foreach ( $lines as $line ) {
+            $line = trim( $line );
+            if ( empty( $line ) || strpos( $line, '#' ) === 0 ) {
+                continue;
+            }
+
+            if ( filter_var( $line, FILTER_VALIDATE_IP ) ) {
+                $signatures[ $line ] = __( 'Feodo Tracker: Botnet C2 server', 'secure-shield' );
+            }
+        }
+    }
+
+    /**
+     * Ingest SSL Blacklist (abuse.ch).
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_sslbl_feed( array &$signatures ) {
+        $response = wp_remote_get( 'https://sslbl.abuse.ch/blacklist/sslipblacklist.csv', array( 'timeout' => 30 ) );
+
+        if ( is_wp_error( $response ) ) {
+            do_action( 'secure_shield/log', sprintf( 'Failed to fetch SSL Blacklist: %s', $response->get_error_message() ), 'warning' );
+            return;
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        if ( empty( $body ) ) {
+            return;
+        }
+
+        $lines = preg_split( '/\r?\n/', $body );
+        foreach ( $lines as $line ) {
+            $line = trim( $line );
+            if ( empty( $line ) || strpos( $line, '#' ) === 0 ) {
+                continue;
+            }
+
+            $parts = str_getcsv( $line );
+            if ( isset( $parts[1] ) && filter_var( $parts[1], FILTER_VALIDATE_IP ) ) {
+                $reason = isset( $parts[2] ) ? sanitize_text_field( $parts[2] ) : 'SSL Blacklist';
+                $signatures[ $parts[1] ] = sprintf( __( 'SSL Blacklist: %s', 'secure-shield' ), $reason );
+            }
+        }
+    }
+
+    /**
+     * Ingest PhishTank phishing URLs.
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_phishtank_feed( array &$signatures ) {
+        // PhishTank requires API key for full access, using verified phish database
+        $response = wp_remote_get( 'http://data.phishtank.com/data/online-valid.csv', array( 'timeout' => 30 ) );
+
+        if ( is_wp_error( $response ) ) {
+            do_action( 'secure_shield/log', sprintf( 'Failed to fetch PhishTank feed: %s', $response->get_error_message() ), 'warning' );
+            return;
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        if ( empty( $body ) ) {
+            return;
+        }
+
+        $lines = preg_split( '/\r?\n/', $body );
+        $count = 0;
+        foreach ( $lines as $line ) {
+            if ( $count++ > 1000 ) {
+                break; // Limit to 1000 phishing URLs
+            }
+
+            $line = trim( $line );
+            if ( empty( $line ) || strpos( $line, 'phish_id' ) === 0 ) {
+                continue; // Skip header
+            }
+
+            $parts = str_getcsv( $line );
+            if ( isset( $parts[1] ) ) { // URL is in column 1
+                $url_parts = wp_parse_url( $parts[1] );
+                if ( ! empty( $url_parts['host'] ) ) {
+                    $signatures[ $url_parts['host'] ] = __( 'PhishTank verified phishing domain', 'secure-shield' );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ingest AlienVault OTX threat intelligence.
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_alienvault_otx( array &$signatures ) {
+        // AlienVault OTX public pulses - requires API key for full access
+        // Using reputation feeds that don't require authentication
+        $feeds = array(
+            'https://reputation.alienvault.com/reputation.generic',
+            'https://reputation.alienvault.com/reputation.data',
+        );
+
+        foreach ( $feeds as $feed_url ) {
+            $response = wp_remote_get( $feed_url, array( 'timeout' => 30 ) );
+
+            if ( is_wp_error( $response ) ) {
+                do_action( 'secure_shield/log', sprintf( 'Failed to fetch AlienVault feed: %s', $response->get_error_message() ), 'warning' );
+                continue;
+            }
+
+            $body = wp_remote_retrieve_body( $response );
+            if ( empty( $body ) ) {
+                continue;
+            }
+
+            $lines = preg_split( '/\r?\n/', $body );
+            foreach ( $lines as $line ) {
+                $line = trim( $line );
+                if ( empty( $line ) || strpos( $line, '#' ) === 0 ) {
+                    continue;
+                }
+
+                $parts = preg_split( '/\s+/', $line );
+                if ( ! empty( $parts[0] ) && filter_var( $parts[0], FILTER_VALIDATE_IP ) ) {
+                    $reliability = isset( $parts[1] ) ? $parts[1] : 'Unknown';
+                    $signatures[ $parts[0] ] = sprintf( __( 'AlienVault OTX: Malicious IP (Reliability: %s)', 'secure-shield' ), $reliability );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ingest Malware Domain List.
+     *
+     * @param array $signatures Reference to signature array.
+     */
+    protected function ingest_malware_domain_list( array &$signatures ) {
+        $response = wp_remote_get( 'https://www.malwaredomainlist.com/hostslist/hosts.txt', array( 'timeout' => 30 ) );
+
+        if ( is_wp_error( $response ) ) {
+            do_action( 'secure_shield/log', sprintf( 'Failed to fetch Malware Domain List: %s', $response->get_error_message() ), 'warning' );
+            return;
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        if ( empty( $body ) ) {
+            return;
+        }
+
+        $lines = preg_split( '/\r?\n/', $body );
+        foreach ( $lines as $line ) {
+            $line = trim( $line );
+            if ( empty( $line ) || strpos( $line, '#' ) === 0 || strpos( $line, 'localhost' ) !== false ) {
+                continue;
+            }
+
+            // Format: 127.0.0.1 malicious-domain.com
+            if ( preg_match( '/^127\.0\.0\.1\s+(.+)$/i', $line, $matches ) ) {
+                $domain = trim( $matches[1] );
+                if ( ! empty( $domain ) ) {
+                    $signatures[ $domain ] = __( 'Malware Domain List: Known malicious domain', 'secure-shield' );
+                }
+            }
         }
     }
 }

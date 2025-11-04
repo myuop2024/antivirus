@@ -210,13 +210,62 @@ class Secure_Shield_Firewall {
             return $file;
         }
 
-        $extension = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
-        $blocked   = array( 'php', 'phtml', 'php5', 'phar', 'cgi', 'pl', 'exe', 'sh' );
+        $filename = $file['name'];
+        $extension = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+
+        // Comprehensive list of dangerous extensions
+        $blocked = array(
+            // PHP variants
+            'php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'phps', 'pht', 'phar',
+            // Perl/CGI
+            'cgi', 'pl', 'plx',
+            // Python
+            'py', 'pyc', 'pyo',
+            // Shell scripts
+            'sh', 'bash', 'zsh', 'ksh', 'command',
+            // Executables
+            'exe', 'com', 'bat', 'cmd', 'scr', 'vbs', 'vbe', 'ws', 'wsf',
+            // ASP/ASPX
+            'asp', 'aspx', 'cer', 'asa', 'asax',
+            // JSP
+            'jsp', 'jspx',
+            // SSI
+            'shtml', 'shtm', 'stm',
+            // Other dangerous
+            'dll', 'so', 'htaccess', 'htpasswd', 'ini', 'config',
+        );
 
         if ( in_array( $extension, $blocked, true ) ) {
             $ip = $this->get_ip_address();
             $this->block_ip( $ip, sprintf( 'Upload blocked for dangerous extension: %s', $extension ) );
             return new WP_Error( 'secure_shield_upload_blocked', __( 'This file type is not allowed for security reasons.', 'secure-shield' ) );
+        }
+
+        // Check for double extensions (e.g., file.php.jpg)
+        if ( preg_match( '/\.(php|phtml|pl|py|cgi|asp|jsp|sh|exe)\./i', $filename ) ) {
+            $ip = $this->get_ip_address();
+            $this->block_ip( $ip, sprintf( 'Upload blocked for double extension: %s', $filename ) );
+            return new WP_Error( 'secure_shield_upload_blocked', __( 'Files with double extensions are not allowed.', 'secure-shield' ) );
+        }
+
+        // Check for null byte injection
+        if ( strpos( $filename, "\0" ) !== false ) {
+            $ip = $this->get_ip_address();
+            $this->block_ip( $ip, 'Upload blocked for null byte in filename' );
+            return new WP_Error( 'secure_shield_upload_blocked', __( 'Invalid filename detected.', 'secure-shield' ) );
+        }
+
+        // If tmp_name exists, scan the actual file content for PHP tags
+        if ( ! empty( $file['tmp_name'] ) && file_exists( $file['tmp_name'] ) ) {
+            $content = @file_get_contents( $file['tmp_name'], false, null, 0, 1024 ); // Read first 1KB
+            if ( false !== $content ) {
+                // Check for PHP opening tags in non-PHP files
+                if ( ! in_array( $extension, array( 'php', 'phtml' ), true ) && preg_match( '/<\?php/i', $content ) ) {
+                    $ip = $this->get_ip_address();
+                    $this->block_ip( $ip, sprintf( 'Upload blocked: PHP code in %s file', $extension ) );
+                    return new WP_Error( 'secure_shield_upload_blocked', __( 'File contains suspicious content.', 'secure-shield' ) );
+                }
+            }
         }
 
         return $file;
@@ -311,11 +360,33 @@ class Secure_Shield_Firewall {
         }
 
         $denylist = array(
-            '#(sqlmap|nikto|acunetix|wpscan|nmap)#i',
+            // Scanners and penetration testing tools
+            '#(sqlmap|nikto|acunetix|wpscan|nmap|masscan|zmap)#i',
+            '#(nessus|openvas|metasploit|burpsuite|vega|w3af)#i',
+            '#(havij|pangolin|webscarab|paros|grabber)#i',
+            '#(dirbuster|dirb|gobuster|wfuzz|ffuf)#i',
+
+            // Bots and crawlers (malicious)
+            '#(semrush|ahrefs|mj12|majestic|blexbot|dotbot)#i',
+            '#(serpstat|linkdex|80legs|spbot|rogerbot)#i',
+
+            // Scripting and automated tools
             '#curl/[0-9]#i',
+            '#wget#i',
             '#python-requests#i',
             '#libwww-perl#i',
-            '#dirbuster#i',
+            '#java/[0-9]#i',
+            '#go-http-client#i',
+            '#ruby#i',
+            '#perl#i',
+
+            // Download managers and scrapers
+            '#(httrack|harvest|extract|grab|siphon)#i',
+            '#(teleport|webcopier|webcapture|webripper)#i',
+
+            // Known malicious
+            '#(backdoor|shell|exploit|payload|virus)#i',
+            '#(injection|joomla|wordpress)scan#i',
         );
 
         foreach ( $denylist as $pattern ) {
@@ -328,16 +399,27 @@ class Secure_Shield_Firewall {
     }
 
     /**
-     * Get visitor IP address.
+     * Get visitor IP address with proper sanitization.
      *
      * @return string
      */
     protected function get_ip_address() {
-        $keys = array( 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' );
+        $keys = array( 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR' );
         foreach ( $keys as $key ) {
             if ( ! empty( $_SERVER[ $key ] ) ) {
-                $ip = explode( ',', $_SERVER[ $key ] );
-                return trim( $ip[0] );
+                $value = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
+                // Handle comma-separated IPs (from proxy chains)
+                $ips = array_map( 'trim', explode( ',', $value ) );
+                foreach ( $ips as $ip ) {
+                    // Validate IP address format
+                    if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+                        return $ip;
+                    }
+                    // If strict validation fails, accept any valid IP format
+                    if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+                        return $ip;
+                    }
+                }
             }
         }
         return '0.0.0.0';

@@ -122,6 +122,29 @@ class Secure_Shield_Scanner {
         $this->verify_integrity( $results );
 
         $results['end'] = current_time( 'timestamp' );
+
+        // Automatic remediation if enabled
+        if ( $this->remediator && $this->settings ) {
+            $cleanup_mode = $this->settings->get_cleanup_mode();
+            if ( 'disabled' !== $cleanup_mode && ! empty( $results['critical'] ) ) {
+                $remediation_results = $this->remediator->auto_remediate_threats( $results );
+                $results['remediation'] = $remediation_results;
+
+                // Log remediation summary
+                $summary = sprintf(
+                    'Automatic remediation: %d files quarantined, %d files repaired, %d database entries sanitized.',
+                    count( $remediation_results['files_quarantined'] ),
+                    count( $remediation_results['files_repaired'] ),
+                    count( $remediation_results['database_sanitized'] )
+                );
+                do_action( 'secure_shield/log', $summary, 'critical' );
+
+                if ( ! empty( $remediation_results['errors'] ) ) {
+                    do_action( 'secure_shield/log', 'Remediation errors: ' . implode( ', ', $remediation_results['errors'] ), 'warning' );
+                }
+            }
+        }
+
         do_action( 'secure_shield/log', sprintf( 'Scan completed with %d critical issues.', count( $results['critical'] ) ) );
         return $results;
     }
@@ -160,18 +183,59 @@ class Secure_Shield_Scanner {
      */
     protected function inspect_file( $file_path, $signatures, &$results ) {
         $ext = strtolower( pathinfo( $file_path, PATHINFO_EXTENSION ) );
-        $relevant_extensions = array( 'php', 'js', 'html', 'htm', 'phtml' );
+        $basename = basename( $file_path );
+        $relevant_extensions = array( 'php', 'js', 'html', 'htm', 'phtml', 'php3', 'php4', 'php5', 'pht', 'phps' );
+
+        // Check for suspicious filenames
+        $suspicious_names = array(
+            'regex:/\.(php|phtml)\.(jpg|png|gif|txt|log)$/i' => __( 'Double extension detected (possible obfuscation)', 'secure-shield' ),
+            'regex:/^(shell|backdoor|cmd|c99|r57|wso|b374k)/i' => __( 'Suspicious filename pattern', 'secure-shield' ),
+            'regex:/^\./i' => __( 'Hidden file detected', 'secure-shield' ),
+        );
+
+        $file_relative = str_replace( wp_normalize_path( ABSPATH ), '', wp_normalize_path( $file_path ) );
+
+        foreach ( $suspicious_names as $pattern => $description ) {
+            if ( 0 === strpos( $pattern, 'regex:' ) ) {
+                $regex_pattern = substr( $pattern, 6 );
+                if ( @preg_match( $regex_pattern, $basename ) ) {
+                    $results['warnings'][ $file_relative ] = $description;
+                }
+            }
+        }
 
         if ( ! in_array( $ext, $relevant_extensions, true ) ) {
             return;
         }
 
-        $contents = @file_get_contents( $file_path );
+        // Cloud-optimized: Increased limit to 100MB for Google Cloud infrastructure
+        // Can be configured via filter: apply_filters('secure_shield_max_file_size', 104857600)
+        $max_filesize = apply_filters( 'secure_shield_max_file_size', 104857600 ); // 100MB default
+        $filesize = @filesize( $file_path );
+
+        if ( false === $filesize ) {
+            return;
+        }
+
+        if ( $filesize > $max_filesize ) {
+            $results['info'][ $file_relative ] = sprintf(
+                __( 'File exceeds maximum scan size (%s), skipped. Use secure_shield_max_file_size filter to adjust.', 'secure-shield' ),
+                size_format( $max_filesize )
+            );
+            return;
+        }
+
+        // For very large files, use chunked reading to be memory-efficient
+        if ( $filesize > 10485760 ) { // 10MB
+            $contents = $this->read_file_chunked( $file_path, $filesize );
+        } else {
+            $contents = @file_get_contents( $file_path );
+        }
+
         if ( false === $contents ) {
             return;
         }
 
-        $file_relative = str_replace( wp_normalize_path( ABSPATH ), '', wp_normalize_path( $file_path ) );
         foreach ( $signatures as $signature => $description ) {
             $is_regex = 0 === strpos( $signature, 'regex:' );
 
@@ -288,30 +352,100 @@ class Secure_Shield_Scanner {
                 'id'    => 'comment_ID',
                 'field' => 'comment_content',
             ),
+            'postmeta' => array(
+                'table' => $wpdb->postmeta,
+                'id'    => 'meta_id',
+                'field' => 'meta_value',
+            ),
+            'options'  => array(
+                'table' => $wpdb->options,
+                'id'    => 'option_id',
+                'field' => 'option_value',
+            ),
         );
 
         foreach ( $targets as $type => $meta ) {
             $id_field    = $meta['id'];
             $content_key = $meta['field'];
             $table       = $meta['table'];
-            $rows        = $wpdb->get_results( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC LIMIT 500", ARRAY_A );
+
+            // Cloud-optimized: Scan all rows by default, configurable via filter
+            // apply_filters('secure_shield_db_scan_limit', 0) where 0 = unlimited
+            $scan_limit = apply_filters( 'secure_shield_db_scan_limit', 0 ); // 0 = scan all
+
+            if ( $scan_limit > 0 ) {
+                $rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC LIMIT %d", $scan_limit ), ARRAY_A );
+            } else {
+                // Scan all rows for comprehensive protection
+                $rows = $wpdb->get_results( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC", ARRAY_A );
+            }
+
             foreach ( (array) $rows as $row ) {
                 $content = $row['content'] ?? '';
+
+                // Skip empty or very short content
+                if ( empty( $content ) || strlen( $content ) < 10 ) {
+                    continue;
+                }
+
                 foreach ( $signatures as $signature => $description ) {
-                    if ( stripos( $content, $signature ) !== false ) {
+                    $is_regex = 0 === strpos( $signature, 'regex:' );
+                    $matched = false;
+
+                    if ( $is_regex ) {
+                        $pattern = substr( $signature, 6 );
+                        $matched = @preg_match( $pattern, $content );
+                    } elseif ( stripos( $content, $signature ) !== false ) {
+                        $matched = true;
+                    }
+
+                    if ( $matched ) {
                         $key = $type . ':' . $row['id'];
+                        $severity = $this->determine_severity( $signature );
+
                         $results['database'][ $key ][] = array(
                             'signature'   => $signature,
                             'description' => $description,
-                            'severity'    => $this->determine_severity( $signature ),
+                            'severity'    => $severity,
                         );
-                        if ( 'critical' === $this->determine_severity( $signature ) ) {
+
+                        if ( 'critical' === $severity ) {
                             $results['critical'][ $key ] = $description;
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Read large files in chunks for memory efficiency.
+     *
+     * @param string $file_path File path.
+     * @param int    $filesize  File size in bytes.
+     *
+     * @return string|false
+     */
+    protected function read_file_chunked( $file_path, $filesize ) {
+        $chunk_size = 8192; // 8KB chunks
+        $handle = @fopen( $file_path, 'rb' );
+
+        if ( false === $handle ) {
+            return false;
+        }
+
+        $content = '';
+        while ( ! feof( $handle ) ) {
+            $chunk = fread( $handle, $chunk_size );
+            if ( false === $chunk ) {
+                fclose( $handle );
+                return false;
+            }
+            $content .= $chunk;
+        }
+
+        fclose( $handle );
+        return $content;
     }
 
     /**
@@ -323,19 +457,48 @@ class Secure_Shield_Scanner {
      */
     protected function determine_severity( $signature ) {
         if ( 0 === strpos( $signature, 'regex:' ) ) {
-            if ( 0 === strpos( $signature, 'regex:/preg_replace' ) ) {
-                return 'critical';
-            }
             $signature = substr( $signature, 6 );
         }
 
-        $critical = array( 'eval(', 'shell_exec(', 'passthru(', 'base64_decode(' );
-        foreach ( $critical as $match ) {
-            if ( false !== strpos( $signature, $match ) ) {
+        // Critical threats - immediate action required
+        $critical_patterns = array(
+            'eval(',
+            'shell_exec(',
+            'exec(',
+            'passthru(',
+            'system(',
+            'proc_open(',
+            'popen(',
+            'pcntl_exec(',
+            'assert(',
+            'create_function(',
+            'preg_replace.*\/e',
+            'c99shell',
+            'r57shell',
+            'wso shell',
+            'b374k',
+            'unserialize.*\$_(GET|POST|REQUEST|COOKIE)',
+            '\$_(GET|POST|REQUEST)\[.*\]\s*\(',
+            'socket_create.*socket_connect',
+            'proc_open.*descriptorspec',
+            'fsockopen.*\/bin\/(bash|sh)',
+            'FilesMan',
+            'Remoteshell',
+            'base64_decode(',
+            'gzinflate(',
+            'gzuncompress(',
+            'str_rot13(',
+            'encrypted|locked|crypto',
+            'pay.*bitcoin',
+        );
+
+        foreach ( $critical_patterns as $pattern ) {
+            if ( false !== stripos( $signature, $pattern ) ) {
                 return 'critical';
             }
         }
 
+        // Everything else is a warning
         return 'warning';
     }
 
