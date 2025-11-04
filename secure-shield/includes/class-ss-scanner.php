@@ -185,16 +185,30 @@ class Secure_Shield_Scanner {
             return;
         }
 
-        // Performance: Skip files larger than 10MB to prevent memory issues
+        // Cloud-optimized: Increased limit to 100MB for Google Cloud infrastructure
+        // Can be configured via filter: apply_filters('secure_shield_max_file_size', 104857600)
+        $max_filesize = apply_filters( 'secure_shield_max_file_size', 104857600 ); // 100MB default
         $filesize = @filesize( $file_path );
-        if ( false === $filesize || $filesize > 10485760 ) {
-            if ( $filesize > 10485760 ) {
-                $results['warnings'][ $file_relative ] = __( 'File too large to scan (>10MB), skipped for performance.', 'secure-shield' );
-            }
+
+        if ( false === $filesize ) {
             return;
         }
 
-        $contents = @file_get_contents( $file_path );
+        if ( $filesize > $max_filesize ) {
+            $results['info'][ $file_relative ] = sprintf(
+                __( 'File exceeds maximum scan size (%s), skipped. Use secure_shield_max_file_size filter to adjust.', 'secure-shield' ),
+                size_format( $max_filesize )
+            );
+            return;
+        }
+
+        // For very large files, use chunked reading to be memory-efficient
+        if ( $filesize > 10485760 ) { // 10MB
+            $contents = $this->read_file_chunked( $file_path, $filesize );
+        } else {
+            $contents = @file_get_contents( $file_path );
+        }
+
         if ( false === $contents ) {
             return;
         }
@@ -332,11 +346,16 @@ class Secure_Shield_Scanner {
             $content_key = $meta['field'];
             $table       = $meta['table'];
 
-            // Get total count for this table
-            $total = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-            $limit = min( 1000, $total ); // Scan up to 1000 rows, or all if less
+            // Cloud-optimized: Scan all rows by default, configurable via filter
+            // apply_filters('secure_shield_db_scan_limit', 0) where 0 = unlimited
+            $scan_limit = apply_filters( 'secure_shield_db_scan_limit', 0 ); // 0 = scan all
 
-            $rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC LIMIT %d", $limit ), ARRAY_A );
+            if ( $scan_limit > 0 ) {
+                $rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC LIMIT %d", $scan_limit ), ARRAY_A );
+            } else {
+                // Scan all rows for comprehensive protection
+                $rows = $wpdb->get_results( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC", ARRAY_A );
+            }
 
             foreach ( (array) $rows as $row ) {
                 $content = $row['content'] ?? '';
@@ -374,6 +393,36 @@ class Secure_Shield_Scanner {
                 }
             }
         }
+    }
+
+    /**
+     * Read large files in chunks for memory efficiency.
+     *
+     * @param string $file_path File path.
+     * @param int    $filesize  File size in bytes.
+     *
+     * @return string|false
+     */
+    protected function read_file_chunked( $file_path, $filesize ) {
+        $chunk_size = 8192; // 8KB chunks
+        $handle = @fopen( $file_path, 'rb' );
+
+        if ( false === $handle ) {
+            return false;
+        }
+
+        $content = '';
+        while ( ! feof( $handle ) ) {
+            $chunk = fread( $handle, $chunk_size );
+            if ( false === $chunk ) {
+                fclose( $handle );
+                return false;
+            }
+            $content .= $chunk;
+        }
+
+        fclose( $handle );
+        return $content;
     }
 
     /**

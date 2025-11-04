@@ -24,11 +24,18 @@ class Secure_Shield_Settings {
      * @var array
      */
     protected $options = array(
-        'secure_shield_wpscan_token'      => '',
-        'secure_shield_nvd_api_key'       => '',
-        'secure_shield_osv_enabled'       => '1',
-        'secure_shield_threatfox_enabled' => '1',
-        'secure_shield_auto_repair'       => '0',
+        'secure_shield_wpscan_token'          => '',
+        'secure_shield_nvd_api_key'           => '',
+        'secure_shield_osv_enabled'           => '1',
+        'secure_shield_threatfox_enabled'     => '1',
+        'secure_shield_auto_repair'           => '0',
+        'secure_shield_malwarebazaar_enabled' => '1',
+        'secure_shield_urlhaus_enabled'       => '1',
+        'secure_shield_feodotracker_enabled'  => '1',
+        'secure_shield_sslbl_enabled'         => '1',
+        'secure_shield_phishtank_enabled'     => '1',
+        'secure_shield_alienvault_enabled'    => '1',
+        'secure_shield_malwaredomain_enabled' => '1',
     );
 
     /**
@@ -56,6 +63,13 @@ class Secure_Shield_Settings {
         register_setting( 'secure_shield', 'secure_shield_osv_enabled', array( $this, 'sanitize_bool' ) );
         register_setting( 'secure_shield', 'secure_shield_threatfox_enabled', array( $this, 'sanitize_bool' ) );
         register_setting( 'secure_shield', 'secure_shield_auto_repair', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_malwarebazaar_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_urlhaus_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_feodotracker_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_sslbl_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_phishtank_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_alienvault_enabled', array( $this, 'sanitize_bool' ) );
+        register_setting( 'secure_shield', 'secure_shield_malwaredomain_enabled', array( $this, 'sanitize_bool' ) );
     }
 
     /**
@@ -128,5 +142,68 @@ class Secure_Shield_Settings {
      */
     public function is_auto_repair_enabled() {
         return '1' === $this->get_option( 'secure_shield_auto_repair', '0' );
+    }
+
+    /**
+     * Check if MalwareBazaar feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_malwarebazaar_enabled() {
+        return '1' === $this->get_option( 'secure_shield_malwarebazaar_enabled', '1' );
+    }
+
+    /**
+     * Check if URLhaus feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_urlhaus_enabled() {
+        return '1' === $this->get_option( 'secure_shield_urlhaus_enabled', '1' );
+    }
+
+    /**
+     * Check if Feodo Tracker feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_feodotracker_enabled() {
+        return '1' === $this->get_option( 'secure_shield_feodotracker_enabled', '1' );
+    }
+
+    /**
+     * Check if SSL Blacklist feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_sslbl_enabled() {
+        return '1' === $this->get_option( 'secure_shield_sslbl_enabled', '1' );
+    }
+
+    /**
+     * Check if PhishTank feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_phishtank_enabled() {
+        return '1' === $this->get_option( 'secure_shield_phishtank_enabled', '1' );
+    }
+
+    /**
+     * Check if AlienVault OTX feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_alienvault_enabled() {
+        return '1' === $this->get_option( 'secure_shield_alienvault_enabled', '1' );
+    }
+
+    /**
+     * Check if Malware Domain List feed is enabled.
+     *
+     * @return bool
+     */
+    public function is_malwaredomain_enabled() {
+        return '1' === $this->get_option( 'secure_shield_malwaredomain_enabled', '1' );
     }
 }
