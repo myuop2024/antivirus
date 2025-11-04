@@ -160,9 +160,37 @@ class Secure_Shield_Scanner {
      */
     protected function inspect_file( $file_path, $signatures, &$results ) {
         $ext = strtolower( pathinfo( $file_path, PATHINFO_EXTENSION ) );
-        $relevant_extensions = array( 'php', 'js', 'html', 'htm', 'phtml' );
+        $basename = basename( $file_path );
+        $relevant_extensions = array( 'php', 'js', 'html', 'htm', 'phtml', 'php3', 'php4', 'php5', 'pht', 'phps' );
+
+        // Check for suspicious filenames
+        $suspicious_names = array(
+            'regex:/\.(php|phtml)\.(jpg|png|gif|txt|log)$/i' => __( 'Double extension detected (possible obfuscation)', 'secure-shield' ),
+            'regex:/^(shell|backdoor|cmd|c99|r57|wso|b374k)/i' => __( 'Suspicious filename pattern', 'secure-shield' ),
+            'regex:/^\./i' => __( 'Hidden file detected', 'secure-shield' ),
+        );
+
+        $file_relative = str_replace( wp_normalize_path( ABSPATH ), '', wp_normalize_path( $file_path ) );
+
+        foreach ( $suspicious_names as $pattern => $description ) {
+            if ( 0 === strpos( $pattern, 'regex:' ) ) {
+                $regex_pattern = substr( $pattern, 6 );
+                if ( @preg_match( $regex_pattern, $basename ) ) {
+                    $results['warnings'][ $file_relative ] = $description;
+                }
+            }
+        }
 
         if ( ! in_array( $ext, $relevant_extensions, true ) ) {
+            return;
+        }
+
+        // Performance: Skip files larger than 10MB to prevent memory issues
+        $filesize = @filesize( $file_path );
+        if ( false === $filesize || $filesize > 10485760 ) {
+            if ( $filesize > 10485760 ) {
+                $results['warnings'][ $file_relative ] = __( 'File too large to scan (>10MB), skipped for performance.', 'secure-shield' );
+            }
             return;
         }
 
@@ -171,7 +199,6 @@ class Secure_Shield_Scanner {
             return;
         }
 
-        $file_relative = str_replace( wp_normalize_path( ABSPATH ), '', wp_normalize_path( $file_path ) );
         foreach ( $signatures as $signature => $description ) {
             $is_regex = 0 === strpos( $signature, 'regex:' );
 
@@ -288,24 +315,59 @@ class Secure_Shield_Scanner {
                 'id'    => 'comment_ID',
                 'field' => 'comment_content',
             ),
+            'postmeta' => array(
+                'table' => $wpdb->postmeta,
+                'id'    => 'meta_id',
+                'field' => 'meta_value',
+            ),
+            'options'  => array(
+                'table' => $wpdb->options,
+                'id'    => 'option_id',
+                'field' => 'option_value',
+            ),
         );
 
         foreach ( $targets as $type => $meta ) {
             $id_field    = $meta['id'];
             $content_key = $meta['field'];
             $table       = $meta['table'];
-            $rows        = $wpdb->get_results( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC LIMIT 500", ARRAY_A );
+
+            // Get total count for this table
+            $total = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+            $limit = min( 1000, $total ); // Scan up to 1000 rows, or all if less
+
+            $rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$id_field} as id, {$content_key} as content FROM {$table} ORDER BY {$id_field} DESC LIMIT %d", $limit ), ARRAY_A );
+
             foreach ( (array) $rows as $row ) {
                 $content = $row['content'] ?? '';
+
+                // Skip empty or very short content
+                if ( empty( $content ) || strlen( $content ) < 10 ) {
+                    continue;
+                }
+
                 foreach ( $signatures as $signature => $description ) {
-                    if ( stripos( $content, $signature ) !== false ) {
+                    $is_regex = 0 === strpos( $signature, 'regex:' );
+                    $matched = false;
+
+                    if ( $is_regex ) {
+                        $pattern = substr( $signature, 6 );
+                        $matched = @preg_match( $pattern, $content );
+                    } elseif ( stripos( $content, $signature ) !== false ) {
+                        $matched = true;
+                    }
+
+                    if ( $matched ) {
                         $key = $type . ':' . $row['id'];
+                        $severity = $this->determine_severity( $signature );
+
                         $results['database'][ $key ][] = array(
                             'signature'   => $signature,
                             'description' => $description,
-                            'severity'    => $this->determine_severity( $signature ),
+                            'severity'    => $severity,
                         );
-                        if ( 'critical' === $this->determine_severity( $signature ) ) {
+
+                        if ( 'critical' === $severity ) {
                             $results['critical'][ $key ] = $description;
                         }
                     }
@@ -323,19 +385,48 @@ class Secure_Shield_Scanner {
      */
     protected function determine_severity( $signature ) {
         if ( 0 === strpos( $signature, 'regex:' ) ) {
-            if ( 0 === strpos( $signature, 'regex:/preg_replace' ) ) {
-                return 'critical';
-            }
             $signature = substr( $signature, 6 );
         }
 
-        $critical = array( 'eval(', 'shell_exec(', 'passthru(', 'base64_decode(' );
-        foreach ( $critical as $match ) {
-            if ( false !== strpos( $signature, $match ) ) {
+        // Critical threats - immediate action required
+        $critical_patterns = array(
+            'eval(',
+            'shell_exec(',
+            'exec(',
+            'passthru(',
+            'system(',
+            'proc_open(',
+            'popen(',
+            'pcntl_exec(',
+            'assert(',
+            'create_function(',
+            'preg_replace.*\/e',
+            'c99shell',
+            'r57shell',
+            'wso shell',
+            'b374k',
+            'unserialize.*\$_(GET|POST|REQUEST|COOKIE)',
+            '\$_(GET|POST|REQUEST)\[.*\]\s*\(',
+            'socket_create.*socket_connect',
+            'proc_open.*descriptorspec',
+            'fsockopen.*\/bin\/(bash|sh)',
+            'FilesMan',
+            'Remoteshell',
+            'base64_decode(',
+            'gzinflate(',
+            'gzuncompress(',
+            'str_rot13(',
+            'encrypted|locked|crypto',
+            'pay.*bitcoin',
+        );
+
+        foreach ( $critical_patterns as $pattern ) {
+            if ( false !== stripos( $signature, $pattern ) ) {
                 return 'critical';
             }
         }
 
+        // Everything else is a warning
         return 'warning';
     }
 
