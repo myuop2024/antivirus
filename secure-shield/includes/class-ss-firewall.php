@@ -61,7 +61,7 @@ class Secure_Shield_Firewall {
         header( 'X-Content-Type-Options: nosniff' );
         header( 'Referrer-Policy: strict-origin-when-cross-origin' );
         header( 'Permissions-Policy: geolocation=(), microphone=(), camera=()' );
-        header( 'Content-Security-Policy: default-src \'self\'; script-src \'self\' \'unsafe-inline\' https://www.google.com https://www.gstatic.com; object-src \'none\'; frame-ancestors \'self\'' );
+        header( "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; object-src 'none'; frame-ancestors 'self'" );
     }
 
     /**
@@ -94,8 +94,7 @@ class Secure_Shield_Firewall {
         $this->inspect_with_signatures( $payload, $ip );
 
         if ( empty( $user_agent ) || strlen( $user_agent ) < 5 ) {
-            $this->block_ip( $ip, 'Missing or empty user agent.' );
-            wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
+            do_action( 'secure_shield/log', sprintf( 'Request allowed with short/empty user agent from %s', $ip ), 'notice' );
         }
 
         if ( 'POST' === $method && $this->looks_like_csrf_probe( $payload_parts ) ) {
@@ -125,6 +124,8 @@ class Secure_Shield_Firewall {
         $referer = isset( $_SERVER['HTTP_REFERER'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '';
         $host    = wp_parse_url( home_url(), PHP_URL_HOST );
 
+        $has_origin_header = ! empty( $origin ) || ! empty( $referer );
+
         $valid = false;
         foreach ( array( $origin, $referer ) as $header ) {
             if ( empty( $header ) ) {
@@ -138,7 +139,12 @@ class Secure_Shield_Firewall {
             }
         }
 
-        if ( ! $valid && ! is_user_logged_in() ) {
+        if ( ! $has_origin_header && ! is_user_logged_in() ) {
+            do_action( 'secure_shield/log', 'State-changing request allowed without Origin/Referer headers.', 'notice' );
+            return;
+        }
+
+        if ( $has_origin_header && ! $valid && ! is_user_logged_in() ) {
             $ip = $this->get_ip_address();
             $this->block_ip( $ip, 'State-changing request without trusted origin headers.' );
             wp_die( esc_html__( 'Request blocked by Secure Shield.', 'secure-shield' ), esc_html__( 'Blocked', 'secure-shield' ), 403 );
